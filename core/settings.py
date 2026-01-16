@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -170,30 +171,34 @@ MEDIA_ROOT = None
 
 
 # Database
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-DB_DIR = BASE_DIR / "data"
-os.makedirs(DB_DIR, exist_ok=True)
-
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DB_DIR / "db.sqlite3",
-        "OPTIONS": {
-            "init_command": (
-                "PRAGMA foreign_keys = ON;"
-                "PRAGMA journal_mode = WAL;"
-                "PRAGMA synchronous = NORMAL;"
-                "PRAGMA busy_timeout = 5000;"
-                "PRAGMA temp_store = MEMORY;"
-                "PRAGMA mmap_size = 134217728;"
-                "PRAGMA journal_size_limit = 67108864;"
-                "PRAGMA cache_size = -20000;"
-            ),
-            "transaction_mode": "IMMEDIATE",
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.config(default=DATABASE_URL, conn_max_age=600)
+    }
+else:
+    DB_DIR = BASE_DIR / "data"
+    os.makedirs(DB_DIR, exist_ok=True)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": DB_DIR / "db.sqlite3",
+            "OPTIONS": {
+                "init_command": (
+                    "PRAGMA foreign_keys = ON;"
+                    "PRAGMA journal_mode = WAL;"
+                    "PRAGMA synchronous = NORMAL;"
+                    "PRAGMA busy_timeout = 5000;"
+                    "PRAGMA temp_store = MEMORY;"
+                    "PRAGMA mmap_size = 134217728;"
+                    "PRAGMA journal_size_limit = 67108864;"
+                    "PRAGMA cache_size = -20000;"
+                ),
+                "transaction_mode": "IMMEDIATE",
+            },
         },
-    },
-}
+    }
 
 
 CACHE_DIR = BASE_DIR / "cache"

@@ -384,6 +384,17 @@ def firebase_auth(request):
         decoded = fb_auth.verify_id_token(id_token, app=app)
         uid = decoded["uid"]
         email = decoded.get("email") or ""
+        
+        # Verificar se o email está na lista de permitidos
+        allowed_emails_str = os.getenv("ALLOWED_EMAILS", "")
+        if allowed_emails_str:
+            allowed_emails = [e.strip().lower() for e in allowed_emails_str.split(",") if e.strip()]
+            if email.lower() not in allowed_emails:
+                error_msg = f"Acesso negado. Email {email} não autorizado."
+                if request.headers.get("Accept") == "application/json":
+                    return JsonResponse({"ok": False, "error": error_msg}, status=403)
+                return HttpResponseBadRequest(error_msg)
+        
         User = get_user_model()
         username = f"fb_{uid}"
         user, _ = User.objects.get_or_create(

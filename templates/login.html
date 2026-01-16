@@ -427,102 +427,109 @@
 </div>
 
 <script src="{% static 'firebase-config.js' %}"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
-    // Prefer a global config (if you provide one in a static file),
-    // otherwise fall back to server-injected env vars.
-    const injectedCfg = {
+    const GOOGLE_CLIENT_ID = "877693374023-k1ouvn1dba385pjn7t4bqtd8g69lt4pg.apps.googleusercontent.com";
+    
+    const cfg = window.FIREBASE_PUBLIC_CONFIG || {
         apiKey: "{{ FIREBASE_API_KEY|default:'' }}",
         authDomain: "{{ FIREBASE_AUTH_DOMAIN|default:'' }}",
         projectId: "{{ FIREBASE_PROJECT_ID|default:'' }}",
     };
-    const cfg = window.FIREBASE_PUBLIC_CONFIG || injectedCfg;
-    async function ensureFirebase() {
-        if (!cfg.apiKey || !cfg.authDomain || !cfg.projectId) {
-            alert("Login indisponível: configure FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN e FIREBASE_PROJECT_ID.");
-            throw new Error("Missing Firebase config");
-        }
-        const [
-            { initializeApp },
-            { getAuth, GoogleAuthProvider, signInWithPopup, getRedirectResult }
-        ] = await Promise.all([
-            import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"),
-            import("https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js"),
-        ]);
+    
+    let auth, GoogleAuthProvider, signInWithCredential;
+    
+    async function initFirebase() {
+        if (auth) return;
+        const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js");
+        const authMod = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js");
         const app = initializeApp(cfg);
-        const auth = getAuth(app);
-        const provider = new GoogleAuthProvider();
-        async function finishAuth(user) {
-            const idToken = await user.getIdToken();
-            // Try fetch (AJAX) first to set cookie
-            try {
-                const resp = await fetch("{% url 'firebase_auth' %}?next=/", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                    credentials: "same-origin",
-                    cache: "no-store",
-                    body: JSON.stringify({ id_token: idToken }),
-                });
-                const data = await resp.json().catch(() => null);
-                if (data && data.ok) {
-                    window.location.href = data.next || "/";
-                    return;
-                }
-            } catch {
-                // ignore and fallback to form POST
-            }
-            // Fallback: top-level form POST to ensure cookie persistence
-            const form = document.createElement("form");
-            form.method = "POST";
-            form.action = "{% url 'firebase_auth' %}?next=/";
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = "id_token";
-            input.value = idToken;
-            form.appendChild(input);
-            document.body.appendChild(form);
-            form.submit();
-        }
-        async function tryHandleRedirectResult() {
-            try {
-                const result = await getRedirectResult(auth);
-                if (result && result.user) {
-                    await finishAuth(result.user);
-                }
-            } catch {
-                // ignore
-            }
-        }
-        // processa resultado de redirect se existir
-        tryHandleRedirectResult();
-
-        async function loginWithFirebasePopup() {
-            try {
-                const res = await signInWithPopup(auth, provider);
-                await finishAuth(res.user);
-            } catch (err) {
-                const code = err && err.code ? String(err.code) : "";
-                if (code === "auth/popup-closed-by-user" || code === "auth/popup-blocked") {
-                    alert("Popup bloqueado/fechado. Permita popups para este site e tente novamente.");
-                    return;
-                }
-                alert("Falha no login.");
-            }
-        }
-        return { loginWithFirebasePopup };
+        auth = authMod.getAuth(app);
+        GoogleAuthProvider = authMod.GoogleAuthProvider;
+        signInWithCredential = authMod.signInWithCredential;
     }
-    const hook = async (el) => {
+    
+    async function finishAuth(firebaseToken) {
+        console.log("Enviando token para Django...");
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "{% url 'firebase_auth' %}?next=/";
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "id_token";
+        input.value = firebaseToken;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    }
+    
+    // Callback do Google One Tap / Sign In
+    window.handleGoogleCredential = async function(response) {
+        console.log("Google ID token recebido!");
         try {
-            const { loginWithFirebasePopup } = await ensureFirebase();
-            el.addEventListener("click", async (e) => {
-                e.preventDefault();
-                await loginWithFirebasePopup();
-            });
-        } catch {}
+            await initFirebase();
+            const credential = GoogleAuthProvider.credential(response.credential);
+            const result = await signInWithCredential(auth, credential);
+            console.log("Firebase OK:", result.user.email);
+            const firebaseToken = await result.user.getIdToken(true);
+            await finishAuth(firebaseToken);
+        } catch (err) {
+            console.error("Erro:", err);
+            alert("Erro: " + (err.message || err.code));
+        }
     };
-    ["firebase-login-btn", "firebase-login-btn-commit", "firebase-login-btn-vibe", "firebase-login-btn-bottom"]
-        .map(id => document.getElementById(id))
-        .filter(Boolean)
-        .forEach(hook);
+    
+    function waitForGoogle(callback, attempts = 0) {
+        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
+            callback();
+        } else if (attempts < 50) {
+            setTimeout(() => waitForGoogle(callback, attempts + 1), 100);
+        } else {
+            alert("Erro ao carregar Google Sign-In. Recarregue a página.");
+        }
+    }
+    
+    function handleLogin() {
+        waitForGoogle(() => {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleCredential,
+            });
+            
+            // Mostra o popup de seleção de conta
+            google.accounts.id.prompt((notification) => {
+                console.log("Prompt notification:", notification);
+                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                    console.log("One Tap indisponível, abrindo seletor...");
+                    // Renderiza botão invisível e clica nele
+                    const div = document.createElement('div');
+                    div.id = 'g_id_onload_hidden';
+                    div.style.display = 'none';
+                    document.body.appendChild(div);
+                    
+                    google.accounts.id.renderButton(div, {
+                        type: 'standard',
+                        size: 'large',
+                    });
+                    
+                    // Clica no botão renderizado
+                    const gBtn = div.querySelector('div[role="button"]');
+                    if (gBtn) gBtn.click();
+                }
+            });
+        });
+    }
+    
+    document.addEventListener("DOMContentLoaded", () => {
+        ["firebase-login-btn", "firebase-login-btn-commit", "firebase-login-btn-vibe", "firebase-login-btn-bottom"]
+            .map(id => document.getElementById(id))
+            .filter(Boolean)
+            .forEach(btn => btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                handleLogin();
+            }));
+    });
 </script>
+
 
 {% endblock %}
