@@ -231,7 +231,7 @@ def facebook_login(request):
         "?response_type=code"
         f"&client_id={settings.FACEBOOK_CLIENT_ID}"
         f"&redirect_uri={settings.FACEBOOK_REDIRECT_URI}"
-        "&scope=email,public_profile,pages_show_list,pages_manage_posts,instagram_basic,instagram_content_publish,business_management"
+        "&scope=public_profile,pages_show_list,pages_read_engagement,instagram_basic,instagram_content_publish,business_management"
     )
     return redirect(fb_login_url)
 

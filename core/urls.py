@@ -4,6 +4,8 @@ from django.contrib.sitemaps.views import sitemap
 from django.http import HttpResponse
 from django.urls import reverse
 from django.contrib.sitemaps import Sitemap
+from django.conf import settings
+from django.conf.urls.static import static
 from socialsched.views import articles
 
 
@@ -53,3 +55,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("__reload__/", include("django_browser_reload.urls")),
 ]
+
+# Serve media files in development and when using local storage
+if settings.MEDIA_URL and settings.MEDIA_ROOT:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -142,20 +142,35 @@ CLOUDFLARE_R2_BUCKET_ENDPOINT = os.getenv("CLOUDFLARE_R2_BUCKET_ENDPOINT")
 CLOUDFLARE_R2_ACCESS_KEY = os.getenv("CLOUDFLARE_R2_ACCESS_KEY")
 CLOUDFLARE_R2_SECRET_KEY = os.getenv("CLOUDFLARE_R2_SECRET_KEY")
 
-STORAGES = {
-    "default": {
-        "BACKEND": "core.storages.MediaFileStorage",
-        "OPTIONS": {
-            "bucket_name": CLOUDFLARE_R2_BUCKET,
-            "default_acl": "public-read",  # or "private"
-            "signature_version": "s3v4",
-            "endpoint_url": CLOUDFLARE_R2_BUCKET_ENDPOINT,
-            "access_key": CLOUDFLARE_R2_ACCESS_KEY,
-            "secret_key": CLOUDFLARE_R2_SECRET_KEY,
+# Use Cloudflare R2 if configured, otherwise use local filesystem
+if CLOUDFLARE_R2_BUCKET:
+    STORAGES = {
+        "default": {
+            "BACKEND": "core.storages.MediaFileStorage",
+            "OPTIONS": {
+                "bucket_name": CLOUDFLARE_R2_BUCKET,
+                "default_acl": "public-read",
+                "signature_version": "s3v4",
+                "endpoint_url": CLOUDFLARE_R2_BUCKET_ENDPOINT,
+                "access_key": CLOUDFLARE_R2_ACCESS_KEY,
+                "secret_key": CLOUDFLARE_R2_SECRET_KEY,
+            },
         },
-    },
-    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-}
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+    MEDIA_URL = None
+    MEDIA_ROOT = None
+else:
+    # Use local filesystem storage (with Railway Volume)
+    MEDIA_ROOT = Path(os.getenv("RAILWAY_VOLUME_MOUNT_PATH", BASE_DIR / "media"))
+    os.makedirs(MEDIA_ROOT, exist_ok=True)
+    MEDIA_URL = "/media/"
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 
 STATIC_URL = "static/"
@@ -164,10 +179,6 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 WHITENOISE_USE_FINDERS = True
 
 os.makedirs(STATIC_ROOT, exist_ok=True)
-
-
-MEDIA_URL = None
-MEDIA_ROOT = None
 
 
 # Database
