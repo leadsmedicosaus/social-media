@@ -10,6 +10,7 @@ urlpatterns = [
         "schedule-delete/<int:post_id>/", views.schedule_delete, name="schedule_delete"
     ),
     path("login/", views.login_user, name="login"),
+    path("auth/firebase/", views.firebase_auth, name="firebase_auth"),
     path("logout/", views.logout_user, name="logout"),
     path("legal/", views.legal, name="legal"),
     path("blog/", views.blog_articles, name="blog_articles"),

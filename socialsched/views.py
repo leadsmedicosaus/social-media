@@ -4,12 +4,20 @@ from pathlib import Path
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import logout
+from django.contrib.auth import logout, login, get_user_model
 from django.utils import timezone
 from django.db.models import Min, Max
 from core.logger import log
 from datetime import datetime, timedelta
 from integrations.helpers.utils import get_tiktok_creator_info, get_integrations_context
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+import json
+import os
+import base64
+import firebase_admin
+from firebase_admin import credentials, auth as fb_auth
 from .models import PostModel
 from .forms import PostForm
 from .schedule_utils import (
@@ -294,7 +302,101 @@ def schedule_delete(request, post_id):
 
 
 def login_user(request):
-    return render(request, "login.html")
+    if request.user.is_authenticated:
+        return redirect("calendar")
+    return render(
+        request,
+        "login.html",
+        context={
+            "FIREBASE_API_KEY": settings.FIREBASE_API_KEY,
+            "FIREBASE_AUTH_DOMAIN": settings.FIREBASE_AUTH_DOMAIN,
+            "FIREBASE_PROJECT_ID": settings.FIREBASE_PROJECT_ID,
+        },
+    )
+
+
+def _get_firebase_app():
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        cred = None
+        b64 = os.getenv("FIREBASE_CREDENTIALS_B64")
+        file_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        # 0) Look for a local file in data/firebase-admin.json
+        try_paths = []
+        try:
+            from pathlib import Path
+            default_path = Path(settings.BASE_DIR) / "data" / "firebase-admin.json"
+            try_paths.append(str(default_path))
+        except Exception:
+            pass
+        if file_path:
+            try_paths.insert(0, file_path)
+        if b64:
+            decoded = base64.b64decode(b64).decode("utf-8")
+            cred = credentials.Certificate(json.loads(decoded))
+        elif any(p and os.path.exists(p) for p in try_paths):
+            for p in try_paths:
+                if p and os.path.exists(p):
+                    cred = credentials.Certificate(p)
+                    break
+        else:
+            project_id = os.getenv("FIREBASE_PROJECT_ID")
+            client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+            private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+            if private_key:
+                private_key = private_key.replace("\\n", "\n")
+            if project_id and client_email and private_key:
+                cred = credentials.Certificate(
+                    {
+                        "type": "service_account",
+                        "project_id": project_id,
+                        "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID", ""),
+                        "private_key": private_key,
+                        "client_email": client_email,
+                        "client_id": os.getenv("FIREBASE_CLIENT_ID", ""),
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL", ""),
+                    }
+                )
+        if cred:
+            return firebase_admin.initialize_app(cred)
+        return firebase_admin.initialize_app()
+
+
+@csrf_exempt
+def firebase_auth(request):
+    if request.method != "POST":
+        return HttpResponseBadRequest("Invalid method")
+    try:
+        id_token = None
+        if request.content_type and "application/json" in request.content_type:
+            body = request.body.decode("utf-8") or "{}"
+            payload = json.loads(body)
+            id_token = payload.get("id_token")
+        if not id_token:
+            id_token = request.POST.get("id_token")
+        if not id_token:
+            return HttpResponseBadRequest("Missing id_token")
+        app = _get_firebase_app()
+        decoded = fb_auth.verify_id_token(id_token, app=app)
+        uid = decoded["uid"]
+        email = decoded.get("email") or ""
+        User = get_user_model()
+        username = f"fb_{uid}"
+        user, _ = User.objects.get_or_create(
+            username=username, defaults={"email": email}
+        )
+        login(request, user)
+        next_url = request.GET.get("next") or "/"
+        if request.headers.get("Accept") == "application/json":
+            return JsonResponse({"ok": True, "next": next_url})
+        return HttpResponseRedirect(next_url)
+    except Exception as err:
+        log.exception(err)
+        return JsonResponse({"ok": False, "error": str(err)}, status=400)
 
 
 @login_required

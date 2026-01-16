@@ -49,6 +49,11 @@ TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET")
 TIKTOK_REDIRECT_URI = APP_URL + "/tiktok/callback/"
 TIKTOK_UNINSTALL_URI = APP_URL + "/tiktok/uninstall/"
 
+# Firebase Web config (frontend)
+FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY")
+FIREBASE_AUTH_DOMAIN = os.getenv("FIREBASE_AUTH_DOMAIN")
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID")
+
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS").split(",") if h.strip()]
 
@@ -64,7 +69,6 @@ CSRF_TRUSTED_ORIGINS = [
 INSTALLED_APPS = [
     "socialsched",
     "integrations",
-    "social_django",
     "django_browser_reload",
     "django_cleanup.apps.CleanupConfig",
     "django.contrib.admin",
@@ -89,7 +93,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "social_django.middleware.SocialAuthExceptionMiddleware",
     "core.middleware.SocialUserMiddleware",
 ]
 
@@ -107,8 +110,6 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "social_django.context_processors.backends",
-                "social_django.context_processors.login_redirect",
             ],
         },
     },
@@ -226,15 +227,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Google OAuth2 Login/Logout
+# Cookies/Security
+SESSION_COOKIE_SECURE = APP_URL.startswith("https://")
+CSRF_COOKIE_SECURE = APP_URL.startswith("https://")
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_KEY")
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET")
-SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI = APP_URL + "/complete/google-oauth2/"
-
+# Authentication backends
 AUTHENTICATION_BACKENDS = [
-    "social_core.backends.google.GoogleOAuth2",
     "django.contrib.auth.backends.ModelBackend",
 ]
-
-SOCIAL_AUTH_REQUIRE_POST = False

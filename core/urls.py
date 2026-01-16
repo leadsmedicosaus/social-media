@@ -51,6 +51,5 @@ urlpatterns = [
     path("", include("integrations.urls")),
     path("robots.txt", robots_txt),
     path("admin/", admin.site.urls),
-    path("", include("social_django.urls", namespace="social")),
     path("__reload__/", include("django_browser_reload.urls")),
 ]
