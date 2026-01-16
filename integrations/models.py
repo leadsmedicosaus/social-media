@@ -49,9 +49,11 @@ class IntegrationsModel(models.Model):
         if self.refresh_token:
             self.refresh_token = aes_cbc.encrypt(self.refresh_token)
 
-        if self.avatar_url and not self.avatar:
+        # Only try to download avatar if storage is properly configured
+        storage_configured = settings.MEDIA_ROOT or os.getenv("CLOUDFLARE_R2_BUCKET")
+        if self.avatar_url and not self.avatar and storage_configured:
             try:
-                response = requests.get(self.avatar_url)
+                response = requests.get(self.avatar_url, timeout=10)
                 response.raise_for_status()
 
                 content_type = response.headers.get("Content-Type", "")
@@ -66,8 +68,7 @@ class IntegrationsModel(models.Model):
 
                 self.avatar.save(filename, ContentFile(response.content), save=False)
             except Exception as err:
-                log.exception(err)
-                log.error(f"Failed to download avatar from {self.avatar_url}: {err}")
+                log.warning(f"Could not download avatar from {self.avatar_url}: {err}")
 
         super().save(*args, **kwargs)
 
