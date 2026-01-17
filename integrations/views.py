@@ -30,22 +30,22 @@ def integrations_form(request):
 
 @login_required
 def linkedin_login(request):
-    # Escopos padrão para perfil pessoal
-    # Para páginas de empresa, é necessário aprovar "Marketing Developer Platform"
+    # Marketing Developer Platform aprovado - usando escopos de organização
+    # w_organization_social: postar em nome da organização
+    # r_organization_social: ler informações da organização
     linkedin_auth_url = (
         "https://www.linkedin.com/oauth/v2/authorization"
         "?response_type=code"
         f"&client_id={settings.LINKEDIN_CLIENT_ID}"
         f"&redirect_uri={settings.LINKEDIN_REDIRECT_URI}"
-        "&scope=w_member_social openid profile email"
+        "&scope=w_organization_social r_organization_social openid profile email"
     )
     return redirect(linkedin_auth_url)
 
 
 @login_required
 def linkedin_callback(request):
-    # Refresh tokens are only for approved Marketing Developer Platform (MDP) partners
-    # https://learn.microsoft.com/en-us/linkedin/shared/authentication/programmatic-refresh-tokens
+    # Marketing Developer Platform approved - can access organization pages
     social_uid = request.social_user_id
 
     code = request.GET.get("code")
@@ -72,24 +72,66 @@ def linkedin_callback(request):
         seconds=access_token_expires_in - 900
     )
 
-    # Get LinkedIn user info (sub is the unique user ID)
-    user_info_url = "https://api.linkedin.com/v2/userinfo"
     headers = {
         "Authorization": f"Bearer {access_token}",
+        "X-Restli-Protocol-Version": "2.0.0",
     }
-    response = requests.get(user_info_url, headers=headers)
-    response.raise_for_status()
-    user_info = response.json()
-    user_id = user_info.get("sub")
-    username = user_info.get("name")
-    avatar_url = user_info.get("picture")
+
+    # Buscar organizações (páginas) que o usuário administra
+    org_response = requests.get(
+        "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(id,localizedName,logoV2(original~:playableStreams))))",
+        headers=headers,
+    )
+    
+    org_id = None
+    org_name = None
+    org_logo_url = None
+    
+    if org_response.status_code == 200:
+        org_data = org_response.json()
+        log.info(f"LinkedIn organizations response: {org_data}")
+        elements = org_data.get("elements", [])
+        
+        if elements:
+            # Pega a primeira organização
+            first_org = elements[0]
+            org_info = first_org.get("organization~", {})
+            org_id = org_info.get("id")
+            org_name = org_info.get("localizedName")
+            
+            # Tenta pegar o logo
+            logo_v2 = org_info.get("logoV2", {})
+            original = logo_v2.get("original~", {})
+            playable_streams = original.get("elements", [])
+            if playable_streams:
+                org_logo_url = playable_streams[0].get("identifiers", [{}])[0].get("identifier")
+    else:
+        log.warning(f"LinkedIn organizations API returned {org_response.status_code}: {org_response.text}")
+    
+    # Se não encontrou organização, fallback para perfil pessoal
+    if not org_id:
+        log.warning("No LinkedIn organization found, falling back to personal profile")
+        user_info_url = "https://api.linkedin.com/v2/userinfo"
+        response = requests.get(user_info_url, headers={"Authorization": f"Bearer {access_token}"})
+        response.raise_for_status()
+        user_info = response.json()
+        user_id = user_info.get("sub")
+        username = user_info.get("name")
+        avatar_url = user_info.get("picture")
+        is_organization = False
+    else:
+        user_id = str(org_id)
+        username = org_name
+        avatar_url = org_logo_url
+        is_organization = True
+        log.info(f"LinkedIn organization found: {org_name} (ID: {org_id})")
 
     # Save Linkedin
     IntegrationsModel.objects.filter(
         account_id=social_uid, platform=Platform.LINKEDIN.value
     ).delete()
 
-    IntegrationsModel.objects.create(
+    integration = IntegrationsModel.objects.create(
         account_id=social_uid,
         user_id=user_id,
         access_token=access_token,
@@ -98,12 +140,24 @@ def linkedin_callback(request):
         username=username,
         avatar_url=avatar_url,
     )
+    
+    # Salva se é organização no refresh_token (hack temporário)
+    if is_organization:
+        integration.refresh_token = "ORG"
+        integration.save()
 
-    messages.success(
-        request,
-        "Successfully logged into LinkedIn! Now the app can make posts on your behalf.",
-        extra_tags="✅ Success!",
-    )
+    if is_organization:
+        messages.success(
+            request,
+            f"Successfully connected LinkedIn Page: {org_name}! Posts will be made on behalf of this page.",
+            extra_tags="✅ Success!",
+        )
+    else:
+        messages.warning(
+            request,
+            "Connected to LinkedIn personal profile. No organization pages found where you are admin.",
+            extra_tags="⚠️ Warning",
+        )
 
     return redirect("/integrations/")
 
