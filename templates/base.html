@@ -153,7 +153,7 @@
     </div>
     {% endif %}
 
-    {% django_browser_reload_script %}
+    {% if debug %}{% django_browser_reload_script %}{% endif %}
 
 
     <footer style="border-top: 1px solid #7b8495; padding-left: 1rem; padding-right: 1rem; margin-top: 12rem;">
