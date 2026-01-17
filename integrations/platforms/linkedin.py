@@ -21,8 +21,6 @@ class LinkedinPoster:
 
         self.user_id = self.integration.user_id
         self.access_token = self.integration.access_token_value
-        # Verifica se é organização (hack: refresh_token == "ORG")
-        self.is_organization = self.integration.refresh_token == "ORG"
 
         if not self.user_id:
             raise ErrorUserIdNotProvided
@@ -35,17 +33,11 @@ class LinkedinPoster:
             "Content-Type": "application/json",
             "X-Restli-Protocol-Version": "2.0.0",
         }
-        
-        # Define o author URN baseado no tipo
-        if self.is_organization:
-            self.author_urn = f"urn:li:organization:{self.user_id}"
-        else:
-            self.author_urn = f"urn:li:person:{self.user_id}"
 
     def _get_basic_payload(self, post_text: str, share_media_category: str):
 
         payload = {
-            "author": self.author_urn,
+            "author": f"urn:li:person:{self.user_id}",
             "lifecycleState": "PUBLISHED",
             "specificContent": {
                 "com.linkedin.ugc.ShareContent": {
@@ -63,7 +55,7 @@ class LinkedinPoster:
         upload_payload = {
             "registerUploadRequest": {
                 "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                "owner": self.author_urn,
+                "owner": f"urn:li:person:{self.user_id}",
                 "serviceRelationships": [
                     {
                         "relationshipType": "OWNER",
