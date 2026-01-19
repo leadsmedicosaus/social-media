@@ -323,7 +323,8 @@ def schedule_edit(request, post_id):
         new_media = request.FILES.get("media_file")
         if new_media:
             post.media_file = new_media
-            post.image_processed = False  # Reset so it won't be reprocessed with text
+            post.process_image = False  # Don't process this image
+            post.image_processed = True  # Mark as already processed (to skip processing)
             post.save(skip_validation=True)
             messages.add_message(
                 request,
@@ -365,7 +366,8 @@ def schedule_update_media(request, post_id):
                 pass
         
         post.media_file = new_media
-        post.image_processed = False  # Reset so it won't be reprocessed with text
+        post.process_image = False  # Don't process this image
+        post.image_processed = True  # Mark as already processed (to skip processing)
         post.save(skip_validation=True)
         
         return JsonResponse({
