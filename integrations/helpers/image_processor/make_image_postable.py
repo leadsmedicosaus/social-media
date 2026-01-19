@@ -156,10 +156,12 @@ def concat_image_vertically(
 
 
 def create_image(*, image_path: str = None, text: str = None):
-    if image_path and not text:
+    # If we have an image, just resize it (don't add text to image)
+    if image_path:
         resized_image_path = resize_image(image_path)
         return resized_image_path
 
+    # If only text (no image), create an image from text with background
     if text and not image_path:
         text_image_path = create_image_from_text(text)
         bg_image_path = get_relevant_image_for_text(text)
@@ -167,28 +169,7 @@ def create_image(*, image_path: str = None, text: str = None):
         os.remove(bg_image_path)
         return resized_image_path
 
-    if text and image_path:
-        text_image_path = None
-        resized_image_path_bk = None
-        try:
-            text_image_path = create_image_from_text(text)
-            resized_image_path = resize_image_width(image_path)
-            resized_image_path_bk = os.path.join(os.path.dirname(resized_image_path), "copy_" + os.path.basename(resized_image_path))
-            shutil.copy(resized_image_path, resized_image_path_bk)
-            concated_image_path = concat_image_vertically(
-                image_path=image_path,
-                top_image_path=text_image_path,
-                bottom_image_path=resized_image_path,
-            )
-            resized_image_path = resize_image(concated_image_path, resized_image_path_bk)
-            return resized_image_path
-        finally:
-            if text_image_path:
-                os.remove(text_image_path)
-            if resized_image_path_bk:
-                os.remove(resized_image_path_bk)
-
-    raise Exception("Image, text or both must be provided!")
+    raise Exception("Image or text must be provided!")
 
 
 def make_image_postable(image_path: str = None, text: str = None):
