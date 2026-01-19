@@ -302,6 +302,43 @@ def schedule_delete(request, post_id):
     return redirect(f"/schedule/{isodate}/")
 
 
+@login_required
+def schedule_edit(request, post_id):
+    social_uid = request.social_user_id
+    post = get_object_or_404(PostModel, id=post_id, account_id=social_uid)
+    isodate = post.scheduled_on.date().isoformat()
+
+    # Check if post is already published
+    if any([post.link_facebook, post.link_instagram, post.link_linkedin, post.link_tiktok, post.link_x]):
+        messages.add_message(
+            request,
+            messages.ERROR,
+            "You cannot edit a published post!",
+            extra_tags="🟥 Not allowed!",
+        )
+        return redirect(f"/schedule/{isodate}/")
+
+    if request.method == "POST":
+        # Handle image upload
+        new_media = request.FILES.get("media_file")
+        if new_media:
+            post.media_file = new_media
+            post.image_processed = False  # Reset so it won't be reprocessed with text
+            post.save(skip_validation=True)
+            messages.add_message(
+                request,
+                messages.SUCCESS,
+                "Image updated successfully!",
+                extra_tags="✅ Success!",
+            )
+        return redirect(f"/schedule/{isodate}/")
+
+    return render(request, "schedule_edit.html", context={
+        "post": post,
+        "isodate": isodate,
+    })
+
+
 def login_user(request):
     if request.user.is_authenticated:
         return redirect("calendar")
