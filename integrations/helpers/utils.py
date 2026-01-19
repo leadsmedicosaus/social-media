@@ -1,7 +1,9 @@
 import os
+import shutil
 import uuid
 import requests
 from core.logger import log
+from core import settings
 from pathlib import Path
 from django.core.cache import cache
 from integrations.models import IntegrationsModel, Platform
@@ -10,11 +12,27 @@ from integrations.platforms.tiktok import TikTokPoster
 
 
 def get_filepath_from_cloudflare_url(url: str):
-
+    """
+    Get a local filepath for a media URL.
+    If URL is remote (http/https), downloads to /tmp.
+    If URL is local (/media/...), copies from MEDIA_ROOT to /tmp.
+    """
     ext = os.path.splitext(url)[1].lower()
     ext = ext.split("?")[0]
     filepath = f"/tmp/{uuid.uuid4().hex}{ext}"
 
+    # Check if it's a local URL (starts with /media/)
+    if url.startswith("/media/") and settings.MEDIA_ROOT:
+        # Local file storage - copy from MEDIA_ROOT
+        relative_path = url.replace("/media/", "", 1)
+        source_path = Path(settings.MEDIA_ROOT) / relative_path
+        if source_path.exists():
+            shutil.copy(str(source_path), filepath)
+            return filepath
+        else:
+            raise FileNotFoundError(f"Media file not found: {source_path}")
+    
+    # Remote URL - download it
     response = requests.get(url)
     response.raise_for_status()
 
