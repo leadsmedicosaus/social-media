@@ -1,4 +1,5 @@
 import uuid
+import mimetypes
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from django.contrib import messages
@@ -10,7 +11,7 @@ from django.db.models import Min, Max
 from core.logger import log
 from datetime import datetime, timedelta
 from integrations.helpers.utils import get_tiktok_creator_info, get_integrations_context
-from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseRedirect
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponseRedirect, FileResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 import json
@@ -523,3 +524,23 @@ def blog_article(request, blog_slug: str):
             "ideas": ideas,
         },
     )
+
+
+def serve_media(request, path):
+    """Serve media files from MEDIA_ROOT (works in production with DEBUG=False)"""
+    if not settings.MEDIA_ROOT:
+        raise Http404("Media storage not configured")
+    
+    file_path = Path(settings.MEDIA_ROOT) / path
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise Http404("File not found")
+    
+    # Security check: ensure the path is within MEDIA_ROOT
+    try:
+        file_path.resolve().relative_to(Path(settings.MEDIA_ROOT).resolve())
+    except ValueError:
+        raise Http404("Access denied")
+    
+    content_type, _ = mimetypes.guess_type(str(file_path))
+    return FileResponse(open(file_path, "rb"), content_type=content_type or "application/octet-stream")

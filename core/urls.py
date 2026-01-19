@@ -42,6 +42,8 @@ sitemaps = {
 }
 
 
+from socialsched.views import serve_media
+
 urlpatterns = [
     path(
         "sitemap.xml",
@@ -56,6 +58,6 @@ urlpatterns = [
     path("__reload__/", include("django_browser_reload.urls")),
 ]
 
-# Serve media files in development and when using local storage
-if settings.MEDIA_URL and settings.MEDIA_ROOT:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve media files - works in both development and production
+if settings.MEDIA_ROOT:
+    urlpatterns += [path("media/<path:path>", serve_media, name="serve_media")]
