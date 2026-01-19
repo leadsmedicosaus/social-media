@@ -7,6 +7,7 @@ urlpatterns = [
     path("schedule/<str:isodate>/", views.schedule_form, name="schedule_form"),
     path("schedule-save/<str:isodate>/", views.schedule_save, name="schedule_save"),
     path("schedule-edit/<int:post_id>/", views.schedule_edit, name="schedule_edit"),
+    path("schedule-update-media/<int:post_id>/", views.schedule_update_media, name="schedule_update_media"),
     path(
         "schedule-delete/<int:post_id>/", views.schedule_delete, name="schedule_delete"
     ),

@@ -339,6 +339,44 @@ def schedule_edit(request, post_id):
     })
 
 
+@login_required
+def schedule_update_media(request, post_id):
+    """AJAX endpoint for updating media via drag-and-drop"""
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=405)
+    
+    social_uid = request.social_user_id
+    post = get_object_or_404(PostModel, id=post_id, account_id=social_uid)
+    
+    # Check if post is already published
+    if any([post.link_facebook, post.link_instagram, post.link_linkedin, post.link_tiktok, post.link_x]):
+        return JsonResponse({"error": "Cannot update a published post"}, status=403)
+    
+    new_media = request.FILES.get("media_file")
+    if not new_media:
+        return JsonResponse({"error": "No file provided"}, status=400)
+    
+    try:
+        # Delete old file if exists
+        if post.media_file:
+            try:
+                post.media_file.delete(save=False)
+            except Exception:
+                pass
+        
+        post.media_file = new_media
+        post.image_processed = False  # Reset so it won't be reprocessed with text
+        post.save(skip_validation=True)
+        
+        return JsonResponse({
+            "success": True,
+            "media_url": post.media_file.url
+        })
+    except Exception as err:
+        log.exception(err)
+        return JsonResponse({"error": str(err)}, status=500)
+
+
 def login_user(request):
     if request.user.is_authenticated:
         return redirect("calendar")

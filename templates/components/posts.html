@@ -2,52 +2,81 @@
 <div style="max-width: 900px; margin: 0 auto;">
 
     {% for post in posts %}
-    <article>
+    <article x-data="dropZone({{ post.id }})">
         <div style="display: flex; justify-content: end;">
             <small class="pico-color-slate-450">{{ post.scheduled_on }}</small>
         </div>
 
         <p style="white-space: pre-line;">{{ post.description }}</p>
 
-        {% if post.media_file %}
-
-
-            {% if post.has_image %}
-            <div x-data="{fullScreen: false}" style="display: flex; justify-content: center;">
-                <div x-show="!fullScreen">
-                    <img @click="fullScreen = true" src="{{ post.media_file.url }}" alt="Media file"
-                        style="max-width: 100%; height: 350px; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
-                </div>
-
-                <dialog :open="fullScreen" @click="fullScreen = false">
-                    <img src="{{ post.media_file.url }}" alt="Media file"
-                        style="max-width: 100%; height: 100%; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
-                </dialog>
+        <!-- Drop zone for new image -->
+        <div 
+            @dragover.prevent="isDragging = true"
+            @dragleave.prevent="isDragging = false"
+            @drop.prevent="handleDrop($event)"
+            :class="isDragging ? 'drop-zone-active' : ''"
+            style="position: relative; min-height: 100px; border-radius: 8px; transition: all 0.2s;"
+        >
+            <!-- Upload overlay -->
+            <div x-show="isDragging" style="position: absolute; inset: 0; background: rgba(0, 200, 150, 0.3); border: 3px dashed #00c896; border-radius: 8px; display: flex; align-items: center; justify-content: center; z-index: 10;">
+                <span style="color: #00c896; font-weight: bold; font-size: 1.2rem;">📷 Solte a imagem aqui</span>
             </div>
-            {% endif %}
-    
-            {% if post.has_video %}
-            <div x-data="{fullScreen: false}" style="display: flex; justify-content: center;">
-                <div x-show="!fullScreen">
-                    <video @click="fullScreen = true" controls
-                        style="max-width: 100%; height: 350px; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
-                        <source src="{{ post.media_file.url }}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                </div>
-
-                <dialog :open="fullScreen" @click="fullScreen = false">
-                    <video controls
-                        style="max-width: 100%; height: 100%; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
-                        <source src="{{ post.media_file.url }}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                </dialog>
+            
+            <!-- Uploading indicator -->
+            <div x-show="isUploading" style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); border-radius: 8px; display: flex; align-items: center; justify-content: center; z-index: 10;">
+                <span style="color: white;" aria-busy="true">Enviando...</span>
             </div>
-            {% endif %}
-    
 
-        {% endif %}
+            {% if post.media_file %}
+                {% if post.has_image %}
+                <div x-data="{fullScreen: false}" style="display: flex; justify-content: center;">
+                    <div x-show="!fullScreen">
+                        <img @click="fullScreen = true" :src="newImageUrl || '{{ post.media_file.url }}'" alt="Media file"
+                            style="max-width: 100%; height: 350px; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px; cursor: pointer;">
+                    </div>
+
+                    <dialog :open="fullScreen" @click="fullScreen = false">
+                        <img :src="newImageUrl || '{{ post.media_file.url }}'" alt="Media file"
+                            style="max-width: 100%; height: 100%; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
+                    </dialog>
+                </div>
+                {% endif %}
+        
+                {% if post.has_video %}
+                <div x-data="{fullScreen: false}" style="display: flex; justify-content: center;">
+                    <div x-show="!fullScreen">
+                        <video @click="fullScreen = true" controls
+                            style="max-width: 100%; height: 350px; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
+                            <source src="{{ post.media_file.url }}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+
+                    <dialog :open="fullScreen" @click="fullScreen = false">
+                        <video controls
+                            style="max-width: 100%; height: 100%; object-fit: contain; margin-bottom: 1rem; margin-top: 1rem; border-radius: 5px;">
+                            <source src="{{ post.media_file.url }}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </dialog>
+                </div>
+                {% endif %}
+            {% else %}
+                <div style="display: flex; justify-content: center; align-items: center; height: 150px; border: 2px dashed #666; border-radius: 8px; margin: 1rem 0;">
+                    <span class="pico-color-slate-500">Arraste uma imagem aqui</span>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Success message -->
+        <div x-show="uploadSuccess" x-transition style="text-align: center; color: #00c896; margin-top: 0.5rem;">
+            ✅ Imagem atualizada!
+        </div>
+
+        <!-- Error message -->
+        <div x-show="uploadError" x-transition style="text-align: center; color: #ff6b6b; margin-top: 0.5rem;">
+            ❌ Erro ao enviar imagem
+        </div>
 
         <div class="mt-1">
 
@@ -149,3 +178,65 @@
     {% endfor %}
 
 </div>
+
+<script>
+function dropZone(postId) {
+    return {
+        postId: postId,
+        isDragging: false,
+        isUploading: false,
+        uploadSuccess: false,
+        uploadError: false,
+        newImageUrl: null,
+
+        async handleDrop(event) {
+            this.isDragging = false;
+            
+            const files = event.dataTransfer.files;
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            
+            // Check if it's an image or video
+            if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+                this.uploadError = true;
+                setTimeout(() => this.uploadError = false, 3000);
+                return;
+            }
+            
+            this.isUploading = true;
+            this.uploadSuccess = false;
+            this.uploadError = false;
+            
+            const formData = new FormData();
+            formData.append('media_file', file);
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}');
+            
+            try {
+                const response = await fetch(`/schedule-update-media/${this.postId}/`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    this.newImageUrl = data.media_url;
+                    this.uploadSuccess = true;
+                    setTimeout(() => this.uploadSuccess = false, 3000);
+                } else {
+                    throw new Error('Upload failed');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                this.uploadError = true;
+                setTimeout(() => this.uploadError = false, 3000);
+            } finally {
+                this.isUploading = false;
+            }
+        }
+    }
+}
+</script>
