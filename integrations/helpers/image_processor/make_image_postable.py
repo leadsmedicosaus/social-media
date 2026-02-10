@@ -25,58 +25,41 @@ def resize_image_width(image_path: str, target_width: int = 1080):
 
 
 def resize_image(image_path: str, image_bg: str = None, target_width: int = 1080, target_height: int = 1350):
-    bgimg_path = image_bg or Path(__file__).parent / "bg.jpg"
-
-    # Open and convert both images to RGB
+    # Open and convert the main image to RGB
     img = Image.open(image_path).convert("RGB")
-    bg_img = Image.open(bgimg_path).convert("RGB")
-
-    # Resize and crop background to exactly match the target size
-    bg_aspect = bg_img.width / bg_img.height
+    
+    # Calculate target and image aspect ratios
     target_aspect = target_width / target_height
-
-    if bg_aspect > target_aspect:
-        # Background is wider — match height, crop width
-        new_bg_height = target_height
-        new_bg_width = int(new_bg_height * bg_aspect)
-        resized_bg = bg_img.resize((new_bg_width, new_bg_height), Image.LANCZOS)
-        left = (new_bg_width - target_width) // 2
-        top = 0
-    else:
-        # Background is taller — match width, crop height
-        new_bg_width = target_width
-        new_bg_height = int(new_bg_width / bg_aspect)
-        resized_bg = bg_img.resize((new_bg_width, new_bg_height), Image.LANCZOS)
-        left = 0
-        top = (new_bg_height - target_height) // 2
-
-    cropped_bg = resized_bg.crop((left, top, left + target_width, top + target_height))
-
-    # Apply blur to the cropped background
-    blurred_bg = cropped_bg.filter(ImageFilter.GaussianBlur(radius=10))
-
-    # Resize the main image to fit within the frame (object-fit: contain)
     img_aspect = img.width / img.height
-    frame_aspect = target_width / target_height
 
-    if img_aspect > frame_aspect:
-        # Image is wider than frame — match width
-        new_img_width = target_width
-        new_img_height = int(target_width / img_aspect)
+    if img_aspect > target_aspect:
+        # Image is wider than target frame — match height, then crop width
+        new_height = target_height
+        new_width = int(new_height * img_aspect)
+        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Calculate cropping box for width
+        left = (new_width - target_width) // 2
+        top = 0
+        right = left + target_width
+        bottom = target_height
     else:
-        # Image is taller than frame — match height
-        new_img_height = target_height
-        new_img_width = int(target_height * img_aspect)
+        # Image is taller than target frame — match width, then crop height
+        new_width = target_width
+        new_height = int(new_width / img_aspect)
+        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Calculate cropping box for height
+        left = 0
+        top = (new_height - target_height) // 2
+        right = target_width
+        bottom = top + target_height
 
-    resized_img = img.resize((new_img_width, new_img_height), Image.LANCZOS)
-
-    # Center the resized image on the blurred background
-    position_x = (target_width - new_img_width) // 2
-    position_y = (target_height - new_img_height) // 2
-    blurred_bg.paste(resized_img, (position_x, position_y))
-
+    # Crop the image to the exact target dimensions
+    final_img = resized_img.crop((left, top, right, bottom))
+    
     # Save the final image
-    blurred_bg.save(image_path)
+    final_img.save(image_path)
     return image_path
 
 
