@@ -45,6 +45,30 @@ class InstagramPoster:
         response.raise_for_status()
         return response.json()["permalink"]
 
+    def _wait_for_container(self, container_id: str):
+        max_checks = 20  # Wait up to 100 seconds
+        for attempt in range(max_checks):
+            status_url = f"https://graph.facebook.com/{self.api_version}/{container_id}"
+            status_resp = requests.get(
+                status_url,
+                params={
+                    "fields": "status_code",
+                    "access_token": self.access_token,
+                },
+            )
+            log.debug(status_resp.json())
+            status_resp.raise_for_status()
+            status = status_resp.json().get("status_code")
+
+            if status == "FINISHED":
+                return
+            elif status in {"ERROR", "EXPIRED"}:
+                raise Exception(f"Media container failed with status: {status}")
+            else:
+                time.sleep(5)
+        
+        raise TimeoutError("Media container not ready after polling")
+
     def post_text_with_image(self, text: str, image_url: str):
         params = {
             "image_url": image_url,
@@ -57,10 +81,13 @@ class InstagramPoster:
         log.debug(container.json())
         container.raise_for_status()
 
+        container_id = container.json()["id"]
+        self._wait_for_container(container_id)
+
         publish = requests.post(
             self.media_publish_url,
             headers={"Authorization": f"Bearer {self.access_token}"},
-            json={"creation_id": container.json()["id"]},
+            json={"creation_id": container_id},
         )
         log.debug(publish.json())
         publish.raise_for_status()
